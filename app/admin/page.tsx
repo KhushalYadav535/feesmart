@@ -35,6 +35,8 @@ import {
   XCircle,
   Clock,
   TrendingDown,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -164,8 +166,10 @@ export default function AdminPage() {
   const [studentProfileDialogOpen, setStudentProfileDialogOpen] = useState(false)
   const [editStudentDialogOpen, setEditStudentDialogOpen] = useState(false)
   const [deleteStudentDialogOpen, setDeleteStudentDialogOpen] = useState(false)
+  const [studentsListDialogOpen, setStudentsListDialogOpen] = useState(false)
   const [editFeeHeadDialogOpen, setEditFeeHeadDialogOpen] = useState(false)
   const [selectedFeeHead, setSelectedFeeHead] = useState<FeeHead | null>(null)
+  const [fullscreenCard, setFullscreenCard] = useState<"student" | "batch" | "fee" | null>(null)
   const [selectedCardData, setSelectedCardData] = useState<{ type: string; data: any } | null>(null)
   const [cardDetailDialogOpen, setCardDetailDialogOpen] = useState(false)
 
@@ -600,7 +604,7 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <Card 
                 className="border-none shadow-sm bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 cursor-pointer hover:shadow-lg transition-all"
-                onClick={() => setActiveSection("students")}
+                onClick={() => setStudentsListDialogOpen(true)}
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-blue-900 dark:text-blue-100">Total Students</CardTitle>
@@ -610,7 +614,7 @@ export default function AdminPage() {
                   <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.totalStudents}</div>
                   <div className="flex items-center text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
                     <TrendingUp className="h-3 w-3 mr-1" />
-                    Click to manage students
+                    Click to view all students
                   </div>
                 </CardContent>
               </Card>
@@ -809,284 +813,47 @@ export default function AdminPage() {
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Student Management</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => handleExportReport("Student List")}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export Report
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Roll No.</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Class</TableHead>
-                        <TableHead>Total Fees</TableHead>
-                        <TableHead>Paid</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>AI-Optimized Reminder Schedule</CardTitle>
+                <Button size="sm" onClick={handleBulkReminders}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send All
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Scheduled Date</TableHead>
+                      <TableHead>Channel</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reminders.map((reminder, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{reminder.studentName}</TableCell>
+                        <TableCell>{new Date(reminder.scheduledDate).toLocaleDateString()}</TableCell>
+                        <TableCell className="capitalize">{reminder.channel}</TableCell>
+                        <TableCell className="max-w-xs truncate">{reminder.message}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{reminder.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleSendReminder(reminder.studentName)}>
+                            Send Now
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {students.map((student) => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-medium">{student.rollNumber}</TableCell>
-                          <TableCell>{student.name}</TableCell>
-                          <TableCell>{student.class}</TableCell>
-                          <TableCell>₹{student.totalFees.toLocaleString()}</TableCell>
-                          <TableCell>₹{student.paidFees.toLocaleString()}</TableCell>
-                          <TableCell>{new Date(student.dueDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                student.status === "paid"
-                                  ? "default"
-                                  : student.status === "overdue"
-                                    ? "destructive"
-                                    : "secondary"
-                              }
-                            >
-                              {student.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => handleViewStudent(student)}>
-                                View
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => {
-                                  setSelectedStudent(student)
-                                  setEditStudentDialogOpen(true)
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setSelectedStudent(student)
-                                  setDeleteStudentDialogOpen(true)
-                                }}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Batch Management</CardTitle>
-                  <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="mr-2 h-4 w-4" /> New Batch
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Create New Batch</DialogTitle>
-                        <DialogDescription>Add a new academic year batch</DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleCreateBatch} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="batchName">Batch Name (Academic Year)</Label>
-                          <Input id="batchName" name="batchName" placeholder="2025-26" required />
-                        </div>
-                        <Button type="submit" className="w-full">
-                          Create Batch
-                        </Button>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {batches.map((batch) => (
-                      <Card key={batch} className="p-4 flex justify-between items-center">
-                        <div>
-                          <h3 className="font-bold">{batch}</h3>
-                          <p className="text-xs text-muted-foreground">Active academic year</p>
-                        </div>
-                        <Badge>Active</Badge>
-                      </Card>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Fee Structure</CardTitle>
-                  <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="mr-2 h-4 w-4" /> Add Head
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Add Fee Head</DialogTitle>
-                        <DialogDescription>Create a new fee category</DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleAddFeeHead} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="headName">Fee Head Name</Label>
-                          <Input id="headName" name="headName" placeholder="e.g. Library Fee" required />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="amount">Amount (₹)</Label>
-                          <Input id="amount" name="amount" type="number" placeholder="5000" required />
-                        </div>
-                        <Button type="submit" className="w-full">
-                          Add Fee Head
-                        </Button>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Head Name</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {feeHeads.map((head) => (
-                        <TableRow key={head.id}>
-                          <TableCell className="font-medium">{head.name}</TableCell>
-                          <TableCell>₹{head.amount.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={head.isMandatory ? "default" : "secondary"}>
-                              {head.isMandatory ? "Mandatory" : "Optional"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedFeeHead(head)
-                                  setEditFeeHeadDialogOpen(true)
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteFeeHead(head.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>AI-Optimized Reminder Schedule</CardTitle>
-                  <Button size="sm" onClick={handleBulkReminders}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Send All
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Student</TableHead>
-                        <TableHead>Scheduled Date</TableHead>
-                        <TableHead>Channel</TableHead>
-                        <TableHead>Message</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {reminders.map((reminder, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{reminder.studentName}</TableCell>
-                          <TableCell>{new Date(reminder.scheduledDate).toLocaleDateString()}</TableCell>
-                          <TableCell className="capitalize">{reminder.channel}</TableCell>
-                          <TableCell className="max-w-xs truncate">{reminder.message}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{reminder.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleSendReminder(reminder.studentName)}>
-                              Send Now
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <Card className="lg:col-span-2 border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>AI Insights</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <AIInsightsPanel insights={aiInsights} />
-                </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>Ask AI</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="e.g., show defaulters, total collection"
-                      value={nlQuery}
-                      onChange={(e) => setNlQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleNLQuery()}
-                    />
-                    <Button onClick={handleNLQuery} disabled={loadingAI} className="w-full">
-                      <Send className="mr-2 h-4 w-4" />
-                      {loadingAI ? "Processing..." : "Ask"}
-                    </Button>
-                  </div>
-                  {nlResponse && (
-                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                      <p className="text-sm">{nlResponse}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -1334,10 +1101,20 @@ export default function AdminPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Student Management</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => handleExportReport("Student List")}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export Report
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setFullscreenCard("student")}
+                      title="Fullscreen"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleExportReport("Student List")}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export Report
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -1413,12 +1190,21 @@ export default function AdminPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Batch Management</CardTitle>
-                  <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="mr-2 h-4 w-4" /> New Batch
-                      </Button>
-                    </DialogTrigger>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setFullscreenCard("batch")}
+                      title="Fullscreen"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                    <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm">
+                          <Plus className="mr-2 h-4 w-4" /> New Batch
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Create New Batch</DialogTitle>
@@ -1435,6 +1221,7 @@ export default function AdminPage() {
                       </form>
                     </DialogContent>
                   </Dialog>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1454,12 +1241,21 @@ export default function AdminPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Fee Structure</CardTitle>
-                  <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="mr-2 h-4 w-4" /> Add Head
-                      </Button>
-                    </DialogTrigger>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setFullscreenCard("fee")}
+                      title="Fullscreen"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                    <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm">
+                          <Plus className="mr-2 h-4 w-4" /> Add Head
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Add Fee Head</DialogTitle>
@@ -1480,6 +1276,7 @@ export default function AdminPage() {
                       </form>
                     </DialogContent>
                   </Dialog>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -1529,49 +1326,49 @@ export default function AdminPage() {
                   </Table>
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>AI-Optimized Reminder Schedule</CardTitle>
-                  <Button size="sm" onClick={handleBulkReminders}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Send All
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Student</TableHead>
-                        <TableHead>Scheduled Date</TableHead>
-                        <TableHead>Channel</TableHead>
-                        <TableHead>Message</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {reminders.map((reminder, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{reminder.studentName}</TableCell>
-                          <TableCell>{new Date(reminder.scheduledDate).toLocaleDateString()}</TableCell>
-                          <TableCell className="capitalize">{reminder.channel}</TableCell>
-                          <TableCell className="max-w-xs truncate">{reminder.message}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{reminder.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleSendReminder(reminder.studentName)}>
-                              Send Now
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
             </div>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>AI-Optimized Reminder Schedule</CardTitle>
+                <Button size="sm" onClick={handleBulkReminders}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send All
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Scheduled Date</TableHead>
+                      <TableHead>Channel</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reminders.map((reminder, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{reminder.studentName}</TableCell>
+                        <TableCell>{new Date(reminder.scheduledDate).toLocaleDateString()}</TableCell>
+                        <TableCell className="capitalize">{reminder.channel}</TableCell>
+                        <TableCell className="max-w-xs truncate">{reminder.message}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{reminder.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleSendReminder(reminder.studentName)}>
+                            Send Now
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               <Card className="lg:col-span-2 border-none shadow-sm">
@@ -2909,6 +2706,324 @@ export default function AdminPage() {
             >
               Cancel
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={studentsListDialogOpen} onOpenChange={setStudentsListDialogOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Students ({students.length})</DialogTitle>
+            <DialogDescription>
+              Complete list of all students in your institute
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {students.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No students found
+              </div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Roll No.</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Class</TableHead>
+                      <TableHead>Total Fees</TableHead>
+                      <TableHead>Paid</TableHead>
+                      <TableHead>Remaining</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students.map((student) => {
+                      const remaining = student.totalFees - student.paidFees
+                      return (
+                        <TableRow key={student.id}>
+                          <TableCell className="font-medium">{student.rollNumber}</TableCell>
+                          <TableCell>{student.name}</TableCell>
+                          <TableCell>{student.class}</TableCell>
+                          <TableCell>₹{student.totalFees.toLocaleString()}</TableCell>
+                          <TableCell>₹{student.paidFees.toLocaleString()}</TableCell>
+                          <TableCell>₹{remaining.toLocaleString()}</TableCell>
+                          <TableCell>{new Date(student.dueDate).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                student.status === "paid"
+                                  ? "default"
+                                  : student.status === "overdue"
+                                    ? "destructive"
+                                    : "secondary"
+                              }
+                            >
+                              {student.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Student Management Card */}
+      <Dialog open={fullscreenCard === "student"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Student Management</DialogTitle>
+                <DialogDescription>Complete student records and management</DialogDescription>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setFullscreenCard(null)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto mt-4">
+            <div className="mb-4 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => handleExportReport("Student List")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Report
+              </Button>
+            </div>
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Roll No.</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Class</TableHead>
+                    <TableHead>Total Fees</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {students.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.rollNumber}</TableCell>
+                      <TableCell>{student.name}</TableCell>
+                      <TableCell>{student.class}</TableCell>
+                      <TableCell>₹{student.totalFees.toLocaleString()}</TableCell>
+                      <TableCell>₹{student.paidFees.toLocaleString()}</TableCell>
+                      <TableCell>{new Date(student.dueDate).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            student.status === "paid"
+                              ? "default"
+                              : student.status === "overdue"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                        >
+                          {student.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewStudent(student)}>
+                            View
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => {
+                              setSelectedStudent(student)
+                              setEditStudentDialogOpen(true)
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setSelectedStudent(student)
+                              setDeleteStudentDialogOpen(true)
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Batch Management Card */}
+      <Dialog open={fullscreenCard === "batch"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Batch Management</DialogTitle>
+                <DialogDescription>Manage academic year batches</DialogDescription>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setFullscreenCard(null)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto mt-4">
+            <div className="mb-4 flex justify-end">
+              <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" /> New Batch
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Batch</DialogTitle>
+                    <DialogDescription>Add a new academic year batch</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleCreateBatch} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="batchNameFullscreen">Batch Name (Academic Year)</Label>
+                      <Input id="batchNameFullscreen" name="batchName" placeholder="2025-26" required />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Create Batch
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {batches.map((batch) => (
+                <Card key={batch} className="p-4 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold">{batch}</h3>
+                    <p className="text-xs text-muted-foreground">Active academic year</p>
+                  </div>
+                  <Badge>Active</Badge>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Fee Structure Card */}
+      <Dialog open={fullscreenCard === "fee"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Fee Structure</DialogTitle>
+                <DialogDescription>Manage fee heads and structure</DialogDescription>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setFullscreenCard(null)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto mt-4">
+            <div className="mb-4 flex justify-end">
+              <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" /> Add Head
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Fee Head</DialogTitle>
+                    <DialogDescription>Create a new fee category</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleAddFeeHead} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="headNameFullscreen">Fee Head Name</Label>
+                      <Input id="headNameFullscreen" name="headName" placeholder="e.g. Library Fee" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="amountFullscreen">Amount (₹)</Label>
+                      <Input id="amountFullscreen" name="amount" type="number" placeholder="5000" required />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Add Fee Head
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Head Name</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {feeHeads.map((head) => (
+                    <TableRow key={head.id}>
+                      <TableCell className="font-medium">{head.name}</TableCell>
+                      <TableCell>₹{head.amount.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge variant={head.isMandatory ? "default" : "secondary"}>
+                          {head.isMandatory ? "Mandatory" : "Optional"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedFeeHead(head)
+                              setEditFeeHeadDialogOpen(true)
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteFeeHead(head.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
