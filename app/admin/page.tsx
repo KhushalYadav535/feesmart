@@ -72,6 +72,9 @@ import { Eye, EyeOff } from "lucide-react"
 import {
   getStudentsByBatch,
   getBatchesByTenant,
+  getStudentsByClass,
+  getClassesByTenant,
+  getClassStats,
   createStaffUser,
   getUsersByTenant,
   getExpensesByTenant,
@@ -134,6 +137,9 @@ export default function AdminPage() {
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null)
   const [selectedBatch, setSelectedBatch] = useState("2024-25")
   const [batches, setBatches] = useState<string[]>([])
+  const [selectedClass, setSelectedClass] = useState<string>("")
+  const [classes, setClasses] = useState<string[]>([])
+  const [classWiseView, setClassWiseView] = useState(false)
   const [staffList, setStaffList] = useState<any[]>([])
   const [staffDialogOpen, setStaffDialogOpen] = useState(false)
   const [staffLoading, setStaffLoading] = useState(false)
@@ -198,6 +204,7 @@ export default function AdminPage() {
       setStudents(studentsList)
       setStats(getTenantStats(user.tenantId))
       setBatches(getBatchesByTenant(user.tenantId))
+      setClasses(getClassesByTenant(user.tenantId))
       setStaffList(getUsersByTenant(user.tenantId).filter((u) => u.role === "staff"))
 
       loadAIInsights(studentsList, user.tenantId)
@@ -483,11 +490,43 @@ export default function AdminPage() {
     setCampaignDialogOpen(true)
   }
 
-  const handleExportReport = (reportType: string) => {
-    toast({
-      title: "Export Started",
-      description: `${reportType} report is being generated and will download shortly.`,
-    })
+  const handleExportReport = (reportType: string, className?: string) => {
+    if (reportType === "Class-wise Report" && className && user?.tenantId) {
+      const classStats = getClassStats(user.tenantId, className)
+      const classStudents = getStudentsByClass(user.tenantId, className)
+      
+      toast({
+        title: "Class-wise Report Generated",
+        description: `${className}: ${classStats.totalStudents} students, ₹${classStats.totalRevenue.toLocaleString()} collected, ₹${classStats.pendingAmount.toLocaleString()} pending.`,
+      })
+    } else {
+      toast({
+        title: "Export Started",
+        description: `${reportType} report is being generated and will download shortly.`,
+      })
+    }
+  }
+
+  const handleClassSelect = (className: string) => {
+    if (className === "all") {
+      handleResetClassFilter()
+      return
+    }
+    setSelectedClass(className)
+    if (user?.tenantId) {
+      const classStudents = getStudentsByClass(user.tenantId, className)
+      setStudents(classStudents)
+      setClassWiseView(true)
+    }
+  }
+
+  const handleResetClassFilter = () => {
+    setSelectedClass("")
+    setClassWiseView(false)
+    if (user?.tenantId) {
+      const studentsList = getStudentsByBatch(user.tenantId, selectedBatch)
+      setStudents(studentsList)
+    }
   }
 
   const handleApproveDiscount = (id: string) => {
@@ -854,10 +893,132 @@ export default function AdminPage() {
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Class/Course Filter Section */}
+            <Card className="mb-6 mt-8">
+              <CardHeader>
+                <CardTitle>Filter by Class/Course</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  View students and fees by class (for schools) or course (for coaching institutes)
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                  <div className="flex-1 w-full md:w-auto">
+                    <Select value={selectedClass || undefined} onValueChange={handleClassSelect}>
+                      <SelectTrigger className="w-full md:w-[300px]">
+                        <SelectValue placeholder="Select Class/Course to filter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Classes/Courses</SelectItem>
+                        {classes.map((cls) => (
+                          <SelectItem key={cls} value={cls}>
+                            {cls}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedClass && (
+                    <div className="flex gap-2">
+                      {user?.tenantId && (() => {
+                        const classStats = getClassStats(user.tenantId, selectedClass)
+                        return (
+                          <div className="flex gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Students: </span>
+                              <span className="font-semibold">{classStats.totalStudents}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Collected: </span>
+                              <span className="font-semibold text-green-600">₹{classStats.totalRevenue.toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Pending: </span>
+                              <span className="font-semibold text-orange-600">₹{classStats.pendingAmount.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      <Button variant="outline" size="sm" onClick={handleResetClassFilter}>
+                        Clear Filter
+                      </Button>
+                      {selectedClass && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleExportReport("Class-wise Report", selectedClass)}
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          Export Report
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {!selectedClass && classes.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground mb-2">Quick Stats by Class/Course:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {classes.map((cls) => {
+                        if (!user?.tenantId) return null
+                        const classStats = getClassStats(user.tenantId, cls)
+                        return (
+                          <div key={cls} className="border rounded-lg p-3 hover:bg-muted/50 cursor-pointer" onClick={() => handleClassSelect(cls)}>
+                            <p className="font-semibold text-sm">{cls}</p>
+                            <div className="flex justify-between mt-1 text-xs">
+                              <span className="text-muted-foreground">{classStats.totalStudents} students</span>
+                              <span className="font-medium">₹{classStats.totalRevenue.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 mt-8">
+              <Card className="lg:col-span-2 border-none shadow-sm">
+                <CardHeader>
+                  <CardTitle>AI Insights</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AIInsightsPanel insights={aiInsights} />
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm">
+                <CardHeader>
+                  <CardTitle>Ask AI</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="e.g., show defaulters, total collection"
+                      value={nlQuery}
+                      onChange={(e) => setNlQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleNLQuery()}
+                    />
+                    <Button onClick={handleNLQuery} disabled={loadingAI} className="w-full">
+                      <Send className="mr-2 h-4 w-4" />
+                      {loadingAI ? "Processing..." : "Ask"}
+                    </Button>
+                  </div>
+                  {nlResponse && (
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-sm">{nlResponse}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
 
-        {activeSection === "students" && (
+        {/* Student Management Section */}
+        {activeSection === "student-management" && (
           <div>
             <div className="flex justify-between items-center mb-8">
               <div>
@@ -887,12 +1048,25 @@ export default function AdminPage() {
                     Add Student
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add New Student</DialogTitle>
+                <DialogContent className="!max-w-[98vw] !max-h-[98vh] !w-[98vw] !h-[98vh] !m-4 overflow-hidden flex flex-col p-6">
+                  <DialogHeader className="flex-shrink-0">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <DialogTitle>Add New Student</DialogTitle>
+                        <DialogDescription>Enter student details to add a new student</DialogDescription>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setDialogOpen(false)}
+                      >
+                        <Minimize2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </DialogHeader>
-                  <form onSubmit={handleAddStudent} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="flex-1 overflow-y-auto mt-4">
+                  <form onSubmit={handleAddStudent} className="space-y-4 max-w-4xl mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="name">Full Name</Label>
                         <Input id="name" name="name" required />
@@ -936,187 +1110,65 @@ export default function AdminPage() {
                       Add Student
                     </Button>
                   </form>
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <Card className="border-none shadow-sm bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-blue-900 dark:text-blue-100">Total Students</CardTitle>
-                  <Users className="h-4 w-4 text-blue-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{stats.totalStudents}</div>
-                  <div className="flex items-center text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +4% from last batch
+            {/* Student Management Card - Full Width */}
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => setFullscreenCard("student")}
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle className="text-sm font-medium">Student Management</CardTitle>
+                    {selectedClass && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Filtered by: <span className="font-semibold">{selectedClass}</span>
+                      </p>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-                    Total Revenue
-                  </CardTitle>
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
-                    ₹{stats.totalRevenue.toLocaleString()}
-                  </div>
-                  <div className="flex items-center text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +12% vs last month
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-sm bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                    AI Predicted Revenue
-                  </CardTitle>
-                  <Sparkles className="h-4 w-4 text-purple-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                    ₹{predictedRevenue.toLocaleString()}
-                  </div>
-                  <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">Expected by end of June</p>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-sm bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-red-900 dark:text-red-100">Defaulters</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-900 dark:text-red-100">{stats.defaulters}</div>
-                  <div className="flex items-center text-xs text-red-600 dark:text-red-400 mt-1 font-medium">
-                    <AlertCircle className="h-3 w-3 mr-1" />
-                    Action required for 3 students
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <Card className="lg:col-span-2 border-none shadow-sm">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Revenue Collection Trend</CardTitle>
-                      <p className="text-xs text-muted-foreground">Monthly collection vs targets</p>
-                    </div>
-                    <Badge variant="secondary" className="bg-accent/10 text-accent border-none">
-                      AI-Powered Analysis
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[240px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs>
-                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis
-                          stroke="#888888"
-                          fontSize={12}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(value) => `₹${value}`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "var(--card)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "8px",
-                          }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="revenue"
-                          stroke="var(--accent)"
-                          fillOpacity={1}
-                          fill="url(#colorRevenue)"
-                          strokeWidth={2}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>Fee Collection Mix</CardTitle>
-                  <p className="text-xs text-muted-foreground">Distribution by payment status</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[240px] w-full relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RePieChart>
-                        <Pie
-                          data={feeTypeData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {feeTypeData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </RePieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-2xl font-bold">75%</span>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Collected</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {feeTypeData.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                          <span>{item.name}</span>
-                        </div>
-                        <span className="font-semibold">{item.value}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Student Management</CardTitle>
                   <div className="flex items-center gap-2">
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      onClick={() => setFullscreenCard("student")}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFullscreenCard("student")
+                      }}
                       title="Fullscreen"
                     >
                       <Maximize2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleExportReport("Student List")}>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleExportReport("Student List", selectedClass || undefined)
+                      }}
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       Export Report
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {selectedClass && (
+                    <div className="mb-4 p-3 bg-muted rounded-lg flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Showing students from {selectedClass}</p>
+                        <p className="text-xs text-muted-foreground">{students.length} student(s) found</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={(e) => {
+                        e.stopPropagation()
+                        handleResetClassFilter()
+                      }}>
+                        Clear Filter
+                      </Button>
+                    </div>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1154,13 +1206,21 @@ export default function AdminPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => handleViewStudent(student)}>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleViewStudent(student)
+                                }}
+                              >
                                 View
                               </Button>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   setSelectedStudent(student)
                                   setEditStudentDialogOpen(true)
                                 }}
@@ -1171,7 +1231,8 @@ export default function AdminPage() {
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-destructive hover:text-destructive"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   setSelectedStudent(student)
                                   setDeleteStudentDialogOpen(true)
                                 }}
@@ -1186,25 +1247,46 @@ export default function AdminPage() {
                   </Table>
                 </CardContent>
               </Card>
+          </div>
+        )}
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Batch Management</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setFullscreenCard("batch")}
-                      title="Fullscreen"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </Button>
-                    <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button size="sm">
-                          <Plus className="mr-2 h-4 w-4" /> New Batch
-                        </Button>
-                      </DialogTrigger>
+        {/* Batch Management Section */}
+        {activeSection === "batch-management" && (
+          <div>
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Batch Management</h1>
+                <p className="text-muted-foreground">Manage academic year batches and assignments</p>
+              </div>
+            </div>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => setFullscreenCard("batch")}
+            >
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Batch Management</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setFullscreenCard("batch")
+                    }}
+                    title="Fullscreen"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                  <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> New Batch
+                      </Button>
+                    </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Create New Batch</DialogTitle>
@@ -1221,41 +1303,62 @@ export default function AdminPage() {
                       </form>
                     </DialogContent>
                   </Dialog>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {batches.map((batch) => (
-                      <Card key={batch} className="p-4 flex justify-between items-center">
-                        <div>
-                          <h3 className="font-bold">{batch}</h3>
-                          <p className="text-xs text-muted-foreground">Active academic year</p>
-                        </div>
-                        <Badge>Active</Badge>
-                      </Card>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {batches.map((batch) => (
+                    <Card key={batch} className="p-4 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
+                      <div>
+                        <h3 className="font-bold">{batch}</h3>
+                        <p className="text-xs text-muted-foreground">Active academic year</p>
+                      </div>
+                      <Badge>Active</Badge>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Fee Structure</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setFullscreenCard("fee")}
-                      title="Fullscreen"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </Button>
-                    <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button size="sm">
-                          <Plus className="mr-2 h-4 w-4" /> Add Head
-                        </Button>
-                      </DialogTrigger>
+        {/* Fee Structure Section */}
+        {activeSection === "fee-structure" && (
+          <div>
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Fee Structure</h1>
+                <p className="text-muted-foreground">Manage fee heads and fee categories</p>
+              </div>
+            </div>
+
+            <Card 
+              className="cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => setFullscreenCard("fee")}
+            >
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Fee Structure</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setFullscreenCard("fee")
+                    }}
+                    title="Fullscreen"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                  <Dialog open={feeHeadDialogOpen} onOpenChange={setFeeHeadDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Add Head
+                      </Button>
+                    </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Add Fee Head</DialogTitle>
@@ -1276,92 +1379,53 @@ export default function AdminPage() {
                       </form>
                     </DialogContent>
                   </Dialog>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Head Name</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {feeHeads.map((head) => (
-                        <TableRow key={head.id}>
-                          <TableCell className="font-medium">{head.name}</TableCell>
-                          <TableCell>₹{head.amount.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={head.isMandatory ? "default" : "secondary"}>
-                              {head.isMandatory ? "Mandatory" : "Optional"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedFeeHead(head)
-                                  setEditFeeHeadDialogOpen(true)
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteFeeHead(head.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>AI-Optimized Reminder Schedule</CardTitle>
-                <Button size="sm" onClick={handleBulkReminders}>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send All
-                </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Scheduled Date</TableHead>
-                      <TableHead>Channel</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Head Name</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reminders.map((reminder, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{reminder.studentName}</TableCell>
-                        <TableCell>{new Date(reminder.scheduledDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="capitalize">{reminder.channel}</TableCell>
-                        <TableCell className="max-w-xs truncate">{reminder.message}</TableCell>
+                    {feeHeads.map((head) => (
+                      <TableRow key={head.id}>
+                        <TableCell className="font-medium">{head.name}</TableCell>
+                        <TableCell>₹{head.amount.toLocaleString()}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{reminder.status}</Badge>
+                          <Badge variant={head.isMandatory ? "default" : "secondary"}>
+                            {head.isMandatory ? "Mandatory" : "Optional"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleSendReminder(reminder.studentName)}>
-                            Send Now
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedFeeHead(head)
+                                setEditFeeHeadDialogOpen(true)
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteFeeHead(head.id)
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1369,42 +1433,6 @@ export default function AdminPage() {
                 </Table>
               </CardContent>
             </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <Card className="lg:col-span-2 border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>AI Insights</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <AIInsightsPanel insights={aiInsights} />
-                </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle>Ask AI</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="e.g., show defaulters, total collection"
-                      value={nlQuery}
-                      onChange={(e) => setNlQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleNLQuery()}
-                    />
-                    <Button onClick={handleNLQuery} disabled={loadingAI} className="w-full">
-                      <Send className="mr-2 h-4 w-4" />
-                      {loadingAI ? "Processing..." : "Ask"}
-                    </Button>
-                  </div>
-                  {nlResponse && (
-                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                      <p className="text-sm">{nlResponse}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
           </div>
         )}
 
@@ -1849,16 +1877,74 @@ export default function AdminPage() {
 
               <Card className="border-none shadow-sm">
                 <CardHeader>
-                  <CardTitle>Class-wise Report</CardTitle>
+                  <CardTitle>Class/Course-wise Report</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Collection statistics broken down by class with payment status distribution.
+                    Collection statistics broken down by class/course with payment status distribution.
                   </p>
-                  <Button className="w-full" onClick={() => handleExportReport("Class-wise Report")}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Generate Report
-                  </Button>
+                  {classes.length > 0 ? (
+                    <div className="space-y-2">
+                      <Select value={selectedClass} onValueChange={handleClassSelect}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Class/Course" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {classes.map((cls) => (
+                            <SelectItem key={cls} value={cls}>
+                              {cls}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedClass && user?.tenantId && (
+                        <div className="mt-4 space-y-2">
+                          {(() => {
+                            const classStats = getClassStats(user.tenantId, selectedClass)
+                            return (
+                              <>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <p className="text-muted-foreground">Total Students</p>
+                                    <p className="font-semibold">{classStats.totalStudents}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Total Fees</p>
+                                    <p className="font-semibold">₹{classStats.totalFees.toLocaleString()}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Collected</p>
+                                    <p className="font-semibold text-green-600">₹{classStats.totalRevenue.toLocaleString()}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Pending</p>
+                                    <p className="font-semibold text-orange-600">₹{classStats.pendingAmount.toLocaleString()}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Paid</p>
+                                    <p className="font-semibold">{classStats.paid}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Defaulters</p>
+                                    <p className="font-semibold text-red-600">{classStats.defaulters}</p>
+                                  </div>
+                                </div>
+                                <Button 
+                                  className="w-full mt-4" 
+                                  onClick={() => handleExportReport("Class-wise Report", selectedClass)}
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Generate Report for {selectedClass}
+                                </Button>
+                              </>
+                            )
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No classes/courses found</p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -2776,7 +2862,7 @@ export default function AdminPage() {
 
       {/* Fullscreen Student Management Card */}
       <Dialog open={fullscreenCard === "student"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+        <DialogContent className="!max-w-[98vw] !max-h-[98vh] !w-[98vw] !h-[98vh] !m-4 overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -2874,7 +2960,7 @@ export default function AdminPage() {
 
       {/* Fullscreen Batch Management Card */}
       <Dialog open={fullscreenCard === "batch"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+        <DialogContent className="!max-w-[98vw] !max-h-[98vh] !w-[98vw] !h-[98vh] !m-4 overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
@@ -2932,7 +3018,7 @@ export default function AdminPage() {
 
       {/* Fullscreen Fee Structure Card */}
       <Dialog open={fullscreenCard === "fee"} onOpenChange={(open) => !open && setFullscreenCard(null)}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-hidden flex flex-col">
+        <DialogContent className="!max-w-[98vw] !max-h-[98vh] !w-[98vw] !h-[98vh] !m-4 overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>

@@ -55,7 +55,9 @@ export function Sidebar({
       case "admin":
         return [
           { label: "Dashboard", id: "dashboard", icon: LayoutDashboard },
-          { label: "Students", id: "students", icon: Users },
+          { label: "Student Management", id: "student-management", icon: Users },
+          { label: "Batch Management", id: "batch-management", icon: FileText },
+          { label: "Fee Structure", id: "fee-structure", icon: DollarSign },
           { label: "Staff", id: "staff", icon: ClipboardList },
           { label: "Reports", id: "reports", icon: BarChart3 },
           { label: "Analytics", id: "analytics", icon: BarChart3 },

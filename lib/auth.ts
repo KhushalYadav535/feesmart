@@ -611,6 +611,38 @@ export function getBatchesByTenant(tenantId: string): string[] {
   return Array.from(new Set(batches)).sort().reverse() // Most recent first
 }
 
+export function getStudentsByClass(tenantId: string, className: string): Student[] {
+  return mockStudents.filter((s) => s.tenantId === tenantId && s.class === className)
+}
+
+export function getClassesByTenant(tenantId: string): string[] {
+  const classes = mockStudents
+    .filter((s) => s.tenantId === tenantId)
+    .map((s) => s.class)
+  return Array.from(new Set(classes)).sort()
+}
+
+export function getClassStats(tenantId: string, className: string) {
+  const classStudents = getStudentsByClass(tenantId, className)
+  const totalStudents = classStudents.length
+  const totalRevenue = classStudents.reduce((sum, s) => sum + s.paidFees, 0)
+  const pendingAmount = classStudents.reduce((sum, s) => sum + (s.totalFees - s.paidFees), 0)
+  const defaulters = classStudents.filter((s) => s.status === "overdue").length
+  const paid = classStudents.filter((s) => s.status === "paid").length
+  const pending = classStudents.filter((s) => s.status === "pending").length
+
+  return {
+    className,
+    totalStudents,
+    totalRevenue,
+    pendingAmount,
+    defaulters,
+    paid,
+    pending,
+    totalFees: classStudents.reduce((sum, s) => sum + s.totalFees, 0),
+  }
+}
+
 // Batch management
 const mockBatches: Array<{ id: string; name: string; tenantId: string; startDate: string; endDate: string; isActive: boolean }> = [
   { id: "b1", name: "2024-25", tenantId: "t1", startDate: "2024-04-01", endDate: "2025-03-31", isActive: true },
