@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getStudentsByTenant, getDefaultersByTenant, type Student } from "@/lib/auth"
+import * as api from "@/lib/api"
+import type { Student } from "@/lib/auth-api"
 import {
   Users,
   ClipboardList,
@@ -49,20 +50,47 @@ function StaffDashboardContent() {
   ])
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "staff")) {
-      router.push("/auth/login")
+    const loadStaffData = async () => {
+      if (!isLoading && (!user || user.role !== "staff")) {
+        router.push("/auth/login")
+        return
+      }
+      if (user?.tenantId) {
+        try {
+          const studentsData = await api.studentsAPI.getAll()
+          setStudents(studentsData)
+          const defaultersData = await api.studentsAPI.getDefaulters()
+          setDefaulters(defaultersData)
+        } catch (error) {
+          console.error("Failed to load staff data:", error)
+          toast({
+            title: "Error",
+            description: "Failed to load data",
+            variant: "destructive"
+          })
+        }
+      }
     }
-    if (user?.tenantId) {
-      setStudents(getStudentsByTenant(user.tenantId))
-      setDefaulters(getDefaultersByTenant(user.tenantId))
-    }
-  }, [user, isLoading, router])
+    loadStaffData()
+  }, [user, isLoading, router, toast])
 
-  const handleAttendance = (studentName: string, status: "Present" | "Absent") => {
-    toast({
-      title: "Attendance Marked",
-      description: `${studentName} marked as ${status}.`,
-    })
+  const handleAttendance = async (studentId: string, studentName: string, status: "Present" | "Absent") => {
+    try {
+      await api.attendanceAPI.mark({
+        studentId,
+        status: status === "Present" ? "present" : "absent"
+      })
+      toast({
+        title: "Attendance Marked",
+        description: `${studentName} marked as ${status}.`,
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to mark attendance",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleVerificationRequest = (studentName: string) => {
@@ -80,12 +108,27 @@ function StaffDashboardContent() {
     setReportDialogOpen(true)
   }
 
-  const handleSubmitBulkAttendance = () => {
-    toast({
-      title: "Bulk Attendance Recorded",
-      description: `Attendance for ${students.length} students has been marked successfully.`,
-    })
-    setBulkAttendanceOpen(false)
+  const handleSubmitBulkAttendance = async () => {
+    try {
+      await api.attendanceAPI.bulkMark({
+        students: students.map(s => ({
+          studentId: s._id || s.id,
+          status: "present"
+        })),
+        defaultStatus: "present"
+      })
+      toast({
+        title: "Bulk Attendance Recorded",
+        description: `Attendance for ${students.length} students has been marked successfully.`,
+      })
+      setBulkAttendanceOpen(false)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to mark bulk attendance",
+        variant: "destructive"
+      })
+    }
   }
 
   if (isLoading || !user) return null
@@ -223,7 +266,7 @@ function StaffDashboardContent() {
                               size="sm"
                               variant="outline"
                               className="w-10 h-10 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 bg-transparent"
-                              onClick={() => handleAttendance(student.name, "Present")}
+                              onClick={() => handleAttendance(student._id || student.id, student.name, "Present")}
                             >
                               P
                             </Button>
@@ -231,7 +274,7 @@ function StaffDashboardContent() {
                               size="sm"
                               variant="outline"
                               className="w-10 h-10 rounded-xl hover:bg-destructive/5 hover:text-destructive hover:border-destructive/20 bg-transparent"
-                              onClick={() => handleAttendance(student.name, "Absent")}
+                              onClick={() => handleAttendance(student._id || student.id, student.name, "Absent")}
                             >
                               A
                             </Button>

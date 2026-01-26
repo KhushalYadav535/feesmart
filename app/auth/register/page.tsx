@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowRight, Sparkles, Building2, User, Mail, Lock, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
-import { registerUser } from "@/lib/auth"
+import * as api from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
 
 export default function RegisterPage() {
@@ -34,8 +34,9 @@ export default function RegisterPage() {
     const password = formData.get("password") as string
 
     try {
-      // <CHANGE> Register admin and create tenant
-      const user = await registerUser(email, password, `${firstName} ${lastName}`, "admin", instituteName)
+      // Register admin and create tenant
+      const response = await api.authAPI.register(email, password, `${firstName} ${lastName}`, "admin", instituteName)
+      const user = response.user
       
       if (user) {
         toast({
@@ -43,7 +44,7 @@ export default function RegisterPage() {
           description: `Welcome to FeeSmart, ${user.name}!`,
         })
         
-        // <CHANGE> Auto-login after registration
+        // Auto-login after registration
         await authLogin(email, password)
       }
     } catch (error: any) {

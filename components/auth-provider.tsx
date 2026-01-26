@@ -25,20 +25,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state from localStorage
   useEffect(() => {
-    const storedUser = localStorage.getItem("feesmart_user")
-    if (storedUser) {
+    const initializeAuth = () => {
       try {
-        setUser(JSON.parse(storedUser))
+        const storedUser = localStorage.getItem("feesmart_user")
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser)
+          // Support both old and new format
+          const userData = parsed.user || parsed
+          const token = parsed.token
+          
+          // Only restore if we have both user and token
+          if (userData && token) {
+            setUser(userData)
+          } else {
+            // If token is missing, clear invalid data
+            localStorage.removeItem("feesmart_user")
+          }
+        }
       } catch (e) {
         console.error("[v0] Failed to parse stored user:", e)
         localStorage.removeItem("feesmart_user")
+      } finally {
+        setLoading(false)
       }
     }
-    setLoading(false)
+    
+    initializeAuth()
   }, [])
 
   // Handle route protection
   useEffect(() => {
+    // Don't redirect while loading - wait for auth state to be restored
     if (loading) return
 
     // Allow public routes
@@ -46,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Only redirect to login if we're sure there's no user (after loading is complete)
     if (!user) {
       router.push("/auth/login")
       return
@@ -66,10 +84,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     setLoading(true)
     try {
-      const authenticatedUser = await loginUser(email, password)
-      if (authenticatedUser) {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      
+      if (!response.ok) {
+        throw new Error("Invalid credentials")
+      }
+      
+      const data = await response.json()
+      const authenticatedUser = data.user
+      const token = data.token
+      
+      if (authenticatedUser && token) {
         setUser(authenticatedUser)
-        localStorage.setItem("feesmart_user", JSON.stringify(authenticatedUser))
+        localStorage.setItem("feesmart_user", JSON.stringify({ user: authenticatedUser, token }))
 
         // Redirect based on role
         if (authenticatedUser.role === "super_admin") router.push("/super-admin")
@@ -92,12 +123,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (email: string, password: string, name: string, role: UserRole, tenantName?: string) => {
     setLoading(true)
     try {
-      const newUser = await registerUser(email, password, name, role, tenantName)
-      if (newUser) {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, role, tenantName })
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Registration failed')
+      }
+      
+      const data = await response.json()
+      const newUser = data.user
+      const token = data.token
+      
+      if (newUser && token) {
         setUser(newUser)
-        localStorage.setItem("feesmart_user", JSON.stringify(newUser))
+        localStorage.setItem("feesmart_user", JSON.stringify({ user: newUser, token }))
         router.push(role === "admin" ? "/admin" : "/")
       }
+    } catch (error: any) {
+      console.error("[v0] Registration failed:", error.message)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -106,10 +154,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginStudent = async (phone: string, dob: string) => {
     setLoading(true)
     try {
-      const authenticatedUser = await loginStudentByPhoneDOB(phone, dob)
-      if (authenticatedUser) {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/student-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, dateOfBirth: dob })
+      })
+      
+      if (!response.ok) {
+        throw new Error("Invalid credentials")
+      }
+      
+      const data = await response.json()
+      const authenticatedUser = data.user
+      const token = data.token
+      
+      if (authenticatedUser && token) {
         setUser(authenticatedUser)
-        localStorage.setItem("feesmart_user", JSON.stringify(authenticatedUser))
+        localStorage.setItem("feesmart_user", JSON.stringify({ user: authenticatedUser, token }))
         router.push("/student")
       } else {
         throw new Error("Invalid credentials")
@@ -125,10 +186,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginParent = async (phone: string) => {
     setLoading(true)
     try {
-      const authenticatedUser = await loginParentByPhone(phone)
-      if (authenticatedUser) {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/parent-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+      
+      if (!response.ok) {
+        throw new Error("Invalid credentials")
+      }
+      
+      const data = await response.json()
+      const authenticatedUser = data.user
+      const token = data.token
+      
+      if (authenticatedUser && token) {
         setUser(authenticatedUser)
-        localStorage.setItem("feesmart_user", JSON.stringify(authenticatedUser))
+        localStorage.setItem("feesmart_user", JSON.stringify({ user: authenticatedUser, token }))
         router.push("/parent")
       } else {
         throw new Error("Invalid credentials")

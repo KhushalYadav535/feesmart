@@ -1,3 +1,5 @@
+import * as api from './api';
+
 export interface FeeHead {
   id: string
   tenantId: string
@@ -6,39 +8,35 @@ export interface FeeHead {
   isMandatory: boolean
 }
 
-const mockFeeHeads: FeeHead[] = [
-  { id: "fh1", tenantId: "t1", name: "Tuition Fee", amount: 40000, isMandatory: true },
-  { id: "fh2", tenantId: "t1", name: "Library Fee", amount: 5000, isMandatory: true },
-  { id: "fh3", tenantId: "t1", name: "Transport Fee", amount: 15000, isMandatory: false },
-]
-
-export function getFeeHeadsByTenant(tenantId: string): FeeHead[] {
-  return mockFeeHeads.filter((f) => f.tenantId === tenantId)
+export async function getFeeHeadsByTenant(tenantId: string): Promise<FeeHead[]> {
+  try {
+    return await api.feeHeadsAPI.getAll();
+  } catch (error) {
+    return [];
+  }
 }
 
-export function addFeeHead(feeHead: Omit<FeeHead, "id">): FeeHead {
-  const newFeeHead: FeeHead = {
-    ...feeHead,
-    id: `fh${mockFeeHeads.length + 1}`,
+export async function addFeeHead(feeHead: Omit<FeeHead, "id">): Promise<FeeHead> {
+  try {
+    return await api.feeHeadsAPI.create(feeHead);
+  } catch (error: any) {
+    throw new Error(error.message || 'Failed to add fee head');
   }
-  mockFeeHeads.push(newFeeHead)
-  return newFeeHead
 }
 
-export function updateFeeHead(id: string, updates: Partial<FeeHead>): FeeHead | null {
-  const feeHead = mockFeeHeads.find((f) => f.id === id)
-  if (feeHead) {
-    Object.assign(feeHead, updates)
-    return feeHead
+export async function updateFeeHead(id: string, updates: Partial<FeeHead>): Promise<FeeHead | null> {
+  try {
+    return await api.feeHeadsAPI.update(id, updates);
+  } catch (error) {
+    return null;
   }
-  return null
 }
 
-export function deleteFeeHead(id: string): boolean {
-  const index = mockFeeHeads.findIndex((f) => f.id === id)
-  if (index !== -1) {
-    mockFeeHeads.splice(index, 1)
-    return true
+export async function deleteFeeHead(id: string): Promise<boolean> {
+  try {
+    await api.feeHeadsAPI.delete(id);
+    return true;
+  } catch (error) {
+    return false;
   }
-  return false
 }

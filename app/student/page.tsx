@@ -14,15 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  getStudentByUserId,
-  getPaymentsByStudent,
-  getDocumentsByStudent,
-  getStudentsByTenant,
-  type Student,
-  type Payment,
-  type Document,
-} from "@/lib/auth"
+import * as api from "@/lib/api"
+import type { Student, Payment, Document } from "@/lib/auth-api"
 import { CreditCard, AlertCircle, Download, TrendingUp, Sparkles, ArrowRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -63,13 +56,42 @@ export default function StudentDashboard() {
     setPaymentDialogOpen(true)
   }
 
-  const handleSubmitPayment = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmitPayment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    toast({
-      title: "Payment Processed",
-      description: "Your fee payment has been recorded successfully. Receipt will be sent via email.",
-    })
-    setPaymentDialogOpen(false)
+    if (!student) return
+    
+    const formData = new FormData(e.currentTarget)
+    const amount = Number(formData.get("amount"))
+    const method = formData.get("method") as "cash" | "online" | "cheque"
+    
+    try {
+      await api.paymentsAPI.create({
+        studentId: student._id || student.id,
+        amount,
+        method,
+        status: "completed"
+      })
+      
+      toast({
+        title: "Payment Processed",
+        description: "Your fee payment has been recorded successfully. Receipt will be sent via email.",
+      })
+      setPaymentDialogOpen(false)
+      
+      // Reload student data
+      const studentData = await api.studentsAPI.getByUserId(user?.id || "")
+      if (studentData) {
+        setStudent(studentData)
+        const paymentsData = await api.paymentsAPI.getByStudent(studentData._id || studentData.id)
+        setPayments(paymentsData)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process payment",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleRequestExtension = (e: React.FormEvent<HTMLFormElement>) => {
@@ -98,22 +120,35 @@ export default function StudentDashboard() {
   }
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "student")) {
-      router.push("/auth/student-login")
-      return
-    }
+    const loadStudentData = async () => {
+      if (!isLoading && (!user || user.role !== "student")) {
+        router.push("/auth/student-login")
+        return
+      }
 
-    if (user && user.role === "student") {
-      // Find student by email since user.id format is "u-std-s1" but we need "s1"
-      const students = getStudentsByTenant(user.tenantId || "")
-      const studentByEmail = students.find((s) => s.email === user.email)
-      if (studentByEmail) {
-        setStudent(studentByEmail)
-        setPayments(getPaymentsByStudent(studentByEmail.id))
-        setDocuments(getDocumentsByStudent(studentByEmail.id))
+      if (user && user.role === "student") {
+        try {
+          // Get student by user ID
+          const studentData = await api.studentsAPI.getByUserId(user.id)
+          if (studentData) {
+            setStudent(studentData)
+            const paymentsData = await api.paymentsAPI.getByStudent(studentData._id || studentData.id)
+            setPayments(paymentsData)
+            const documentsData = await api.documentsAPI.getByStudent(studentData._id || studentData.id)
+            setDocuments(documentsData)
+          }
+        } catch (error) {
+          console.error("Failed to load student data:", error)
+          toast({
+            title: "Error",
+            description: "Failed to load student data",
+            variant: "destructive"
+          })
+        }
       }
     }
-  }, [user, isLoading, router])
+    loadStudentData()
+  }, [user, isLoading, router, toast])
 
   if (isLoading || !user || !student) return null
 
@@ -134,9 +169,9 @@ export default function StudentDashboard() {
                 AI Verified
               </Badge>
             </div>
-            {/* Added Batch and Roll Number info to the header */}
+            {/* Added Batch, Student ID, and Course/Class info to the header */}
             <p className="text-muted-foreground text-sm font-medium">
-              Roll: {student.rollNumber} • Batch: {student.batch} • {student.class}
+              Student ID: {student.studentId || student.rollNumber || 'N/A'} • Course/Class: {student.class} • Batch: {student.batch}
             </p>
           </div>
           <div className="flex gap-2">
@@ -155,20 +190,36 @@ export default function StudentDashboard() {
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                  Payment Progress
+                  Fee Payment Status
                 </CardTitle>
                 <TrendingUp className="w-4 h-4 text-accent" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex items-baseline gap-2 mb-4">
-                <span className="text-4xl font-bold">₹{student.paidFees.toLocaleString()}</span>
-                <span className="text-sm text-muted-foreground">/ ₹{student.totalFees.toLocaleString()}</span>
-              </div>
-              <Progress value={paidPercentage} className="h-3 bg-muted group-hover:bg-muted/50 transition-colors" />
-              <div className="flex justify-between mt-3 text-xs">
-                <span className="text-muted-foreground font-medium">₹{remainingAmount.toLocaleString()} Remaining</span>
-                <span className="text-accent font-bold">{paidPercentage.toFixed(0)}% Completed</span>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Course/Class</p>
+                  <p className="text-lg font-semibold">{student.class}</p>
+                </div>
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-4xl font-bold">₹{student.paidFees.toLocaleString()}</span>
+                  <span className="text-sm text-muted-foreground">/ ₹{student.totalFees.toLocaleString()}</span>
+                </div>
+                <Progress value={paidPercentage} className="h-3 bg-muted group-hover:bg-muted/50 transition-colors" />
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Paid Amount</p>
+                    <p className="text-lg font-bold text-green-600">₹{student.paidFees.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Pending Amount</p>
+                    <p className="text-lg font-bold text-orange-600">₹{remainingAmount.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between mt-3 text-xs">
+                  <span className="text-muted-foreground font-medium">Total Fees: ₹{student.totalFees.toLocaleString()}</span>
+                  <span className="text-accent font-bold">{paidPercentage.toFixed(0)}% Completed</span>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getParentByEmail, getStudentsByParent, getPaymentsByStudent, type Student, type Payment } from "@/lib/auth"
+import * as api from "@/lib/api"
+import type { Student, Payment } from "@/lib/auth-api"
 import { Users, DollarSign, AlertCircle, Download, TrendingUp, CreditCard, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -29,28 +30,46 @@ export default function ParentPortal() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
 
   useEffect(() => {
-    if (!isLoading) {
-      if (!user || user.role !== "parent") {
-        router.push("/auth/parent-login")
-        return
-      }
+    const loadParentData = async () => {
+      if (!isLoading) {
+        if (!user || user.role !== "parent") {
+          router.push("/auth/parent-login")
+          return
+        }
 
-      // Get parent by email from authenticated user
-      const parent = getParentByEmail(user.email)
-      if (parent) {
-        const childrenList = getStudentsByParent(parent.id)
-        setChildren(childrenList)
-        if (childrenList.length > 0) {
-          setSelectedChild(childrenList[0])
-          setPayments(getPaymentsByStudent(childrenList[0].id))
+        try {
+          // Get parent by email from authenticated user
+          const parent = await api.parentsAPI.getByEmail(user.email)
+          if (parent) {
+            const childrenList = await api.parentsAPI.getStudents(parent._id || parent.id)
+            setChildren(childrenList)
+            if (childrenList.length > 0) {
+              setSelectedChild(childrenList[0])
+              const paymentsData = await api.paymentsAPI.getByStudent(childrenList[0]._id || childrenList[0].id)
+              setPayments(paymentsData)
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load parent data:", error)
+          toast({
+            title: "Error",
+            description: "Failed to load parent data",
+            variant: "destructive"
+          })
         }
       }
     }
-  }, [isLoading, user, router])
+    loadParentData()
+  }, [isLoading, user, router, toast])
 
-  const handleChildSelect = (child: Student) => {
+  const handleChildSelect = async (child: Student) => {
     setSelectedChild(child)
-    setPayments(getPaymentsByStudent(child.id))
+    try {
+      const paymentsData = await api.paymentsAPI.getByStudent(child._id || child.id)
+      setPayments(paymentsData)
+    } catch (error) {
+      console.error("Failed to load payments:", error)
+    }
   }
 
   const handlePayNow = () => {
@@ -59,13 +78,38 @@ export default function ParentPortal() {
     }
   }
 
-  const handleSubmitPayment = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmitPayment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    toast({
-      title: "Payment Processed",
-      description: `Payment for ${selectedChild?.name} has been recorded successfully.`,
-    })
-    setPaymentDialogOpen(false)
+    if (!selectedChild) return
+    
+    const formData = new FormData(e.currentTarget)
+    const amount = Number(formData.get("amount"))
+    const method = formData.get("method") as "cash" | "online" | "cheque"
+    
+    try {
+      await api.paymentsAPI.create({
+        studentId: selectedChild._id || selectedChild.id,
+        amount,
+        method,
+        status: "completed"
+      })
+      
+      toast({
+        title: "Payment Processed",
+        description: `Payment for ${selectedChild?.name} has been recorded successfully.`,
+      })
+      setPaymentDialogOpen(false)
+      
+      // Reload payments
+      const paymentsData = await api.paymentsAPI.getByStudent(selectedChild._id || selectedChild.id)
+      setPayments(paymentsData)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process payment",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleDownloadReceipt = (paymentId: string) => {

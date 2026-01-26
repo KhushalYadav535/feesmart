@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getTenants } from "@/lib/auth"
+import * as api from "@/lib/api"
 import { Building2, Users, CreditCard, Activity, Download, TrendingUp } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { registerUser } from "@/lib/auth"
+import type { Tenant } from "@/lib/auth-api"
 
 const tenantData = [
   { name: "Demo School", revenue: 45000 },
@@ -39,16 +39,28 @@ export default function SuperAdminDashboard() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
-  const [tenants, setTenants] = useState(getTenants())
+  const [tenants, setTenants] = useState<Tenant[]>([])
   const [regLoading, setRegLoading] = useState(false)
   const [regOpen, setRegOpen] = useState(false)
   const [editTenantOpen, setEditTenantOpen] = useState(false)
   const [selectedTenant, setSelectedTenant] = useState<any>(null)
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== "super_admin")) {
-      router.push("/auth/login")
+    const loadTenants = async () => {
+      if (!isLoading && (!user || user.role !== "super_admin")) {
+        router.push("/auth/login")
+        return
+      }
+      if (user?.role === "super_admin") {
+        try {
+          const tenantsData = await api.tenantsAPI.getAll()
+          setTenants(tenantsData)
+        } catch (error) {
+          console.error("Failed to load tenants:", error)
+        }
+      }
     }
+    loadTenants()
   }, [user, isLoading, router])
 
   const handleBillingAction = (tenantName: string) => {
@@ -65,13 +77,23 @@ export default function SuperAdminDashboard() {
     })
   }
 
-  const handleToggleTenantStatus = (id: string, name: string, currentStatus: boolean) => {
-    setTenants(tenants.map((t) => (t.id === id ? { ...t, isActive: !currentStatus } : t)))
-    toast({
-      title: currentStatus ? "Institute Suspended" : "Institute Activated",
-      description: `${name} status has been updated.`,
-      variant: currentStatus ? "destructive" : "default",
-    })
+  const handleToggleTenantStatus = async (id: string, name: string, currentStatus: boolean) => {
+    try {
+      await api.tenantsAPI.updateStatus(id, !currentStatus)
+      const tenantsData = await api.tenantsAPI.getAll()
+      setTenants(tenantsData)
+      toast({
+        title: currentStatus ? "Institute Suspended" : "Institute Activated",
+        description: `${name} status has been updated.`,
+        variant: currentStatus ? "destructive" : "default",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update tenant status",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleAddInstitute = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -84,8 +106,9 @@ export default function SuperAdminDashboard() {
     const password = formData.get("password") as string
 
     try {
-      await registerUser(email, password, name, "admin", instituteName)
-      setTenants(getTenants())
+      await api.authAPI.register(email, password, name, "admin", instituteName)
+      const tenantsData = await api.tenantsAPI.getAll()
+      setTenants(tenantsData)
       setRegOpen(false)
       toast({ title: "Institute Registered", description: `${instituteName} has been added to the system.` })
     } catch (err: any) {
