@@ -26,7 +26,7 @@ export default function LoginPage() {
     try {
       await login(email, password)
     } catch (err: any) {
-      setError("Invalid credentials. Use demo: super@feesmart.com / super123, admin@school.com / admin123, etc.")
+      setError(err.message || "Invalid email or password")
     }
   }
 
